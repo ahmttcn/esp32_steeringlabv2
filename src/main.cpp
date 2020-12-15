@@ -9,6 +9,7 @@
 #include "esp_services.h"
 #include "esp_eeprom.h"
 #include "esp_tcp_server.h"
+#include "freertos/FreeRTOSConfig.h"
 
 #define WIFI_COMMAND 0
 
@@ -21,6 +22,7 @@ TaskHandle_t TaskBroadcast;
 TaskHandle_t TaskTcpRx;
 TaskHandle_t TaskTcpTx;
 TaskHandle_t TaskListenClient;
+TaskHandle_t TaskServerStart;
 
 // Function Declarations
 void scan_networks(void * parameters);
@@ -30,6 +32,7 @@ void read_wifi_credential(void * parameters);
 void udp_broadcast(void * parameters);
 void listen_client(void * parameters);
 void read_client(void * parameters);
+void tcp_server_start(void * parameters);
 int which_command(String cmd);
 void create_task();
 
@@ -52,46 +55,18 @@ bool wifiConnection = false;
 bool _startServer = false;
 
 void setup() {
-  if(espServices.wifi_connect()){
-    uartSerial.println("Wifi connection is successful");
-    uartSerial.println("Server Started");
-    espTcpServer->startServer();
-    /*
-    * Listen Tcp Client
-    * Param: NULL
-    * Priority: 25
-    * Stack size: 4Kb 
-    */
-    uartSerial.println("Task Created");
-    xTaskCreate(
-      listen_client,
-      "listenClient",
-      (1024 * 4),
-      NULL,
-      25,
-      &TaskListenClient
-    );
-
-    uartSerial.println("Task Created");
-    xTaskCreate(
-      read_client,
-      "readMessages",
-      (1024 * 4),
-      NULL,
-      25,
-      &TaskTcpRx
-    );
-    
-    uartSerial.println(WiFi.localIP().toString());
+  if(!espServices.wifi_connect()){
+    uartSerial.println("Wifi connection error!!");
   }else
   {
-    uartSerial.println("Wifi connection error!");
+    wifiConnection = true;
   }
+  
   create_task();
 }
 
 void loop() {
-  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  vTaskDelay(100 / portTICK_PERIOD_MS);
 }
 
 // RTOS Tasks
@@ -107,7 +82,7 @@ void create_task(){
       "readUart",
       (1024 * 4),
       NULL,
-      25,
+      configMAX_PRIORITIES,
       &TaskRead
   );
 
@@ -118,6 +93,7 @@ void create_task(){
   * Stack size: 2Kb
   * Pinned Core 0 
   */
+ /*
   xTaskCreatePinnedToCore(
     read_wifi_credential,
     "readWifi",
@@ -126,7 +102,7 @@ void create_task(){
     1,
     &TaskCredetials,
     0
-  );
+  );*/
 
   /*
   * Scans wifi networks
@@ -134,6 +110,7 @@ void create_task(){
   * Priority: 1
   * Stack size: 2Kb 
   */
+ /*
   xTaskCreate(
     scan_networks,
     "scanNetworks",
@@ -141,7 +118,7 @@ void create_task(){
     NULL,
     1,
     &TaskScan
-  );
+  );*/
 
   /*
   * Check WiFi connection
@@ -166,14 +143,48 @@ void create_task(){
     1,
     &TaskBroadcast
   );
+
+  xTaskCreate(
+    tcp_server_start,
+    "tcpServer",
+    1024 * 2,
+    NULL,
+    1,
+    &TaskServerStart
+  );
+
+  xTaskCreate(
+    listen_client,
+    "listenClient",
+    (1024 * 2),
+    NULL,
+    15,
+    &TaskListenClient
+  );
+
+  xTaskCreate(
+    read_client,
+    "readMessages",
+    (1024 * 4),
+    NULL,
+    1,
+    &TaskTcpRx
+  );
 }
 
 void read_uart1( void * parameters) {
   String incomingString;
+  char newChar;
+  uartSerial.println("UART READY");
   for(;;){
     if (uartSerial.available()) {
+      incomingString = "";
       // read the incoming byte:
-      incomingString = uartSerial.readString();
+      while (uartSerial.available())
+      {
+        newChar = static_cast<char>(uartSerial.read());
+        incomingString += newChar;
+      }
       if (incomingString.startsWith("#"))
       {
         int firstSign = incomingString.indexOf(':',0);
@@ -193,14 +204,14 @@ void read_uart1( void * parameters) {
               String password = incomingString.substring((ssidEnd + 1));
               uartSerial.println("SSID: " + ssid);
               uartSerial.println("Password: " + password);
-              vTaskSuspend(TaskCredetials);
+              //vTaskSuspend(TaskCredetials);
               if(espServices.wifi_init(ssid,password)){
                 uartSerial.println("Wifi connection successfull: " + ssid + " : " + password);
               }else
               {
                 uartSerial.println("SSID or PASSWORD is not correct!");
               }
-              vTaskResume(TaskCredetials);
+              //vTaskResume(TaskCredetials);
               break;
             }
         
@@ -217,7 +228,7 @@ void read_uart1( void * parameters) {
     }else
     {
       vTaskDelay(5 / portTICK_PERIOD_MS);
-      continue;
+      //continue;
     }
   }
 }
@@ -230,8 +241,8 @@ void listen_client(void * parameters){
       vTaskDelay(200 / portTICK_PERIOD_MS);
     }else
     {
-      uartSerial.println("Start Server False");
-      vTaskDelay(5000 / portTICK_PERIOD_MS);
+      uartSerial.println("Server is not active!");
+      vTaskDelay(20000 / portTICK_PERIOD_MS);
     }
   }
 }
@@ -247,8 +258,8 @@ void read_client(void * parameters){
       vTaskDelay(5 / portTICK_PERIOD_MS);
     }else
     {
-      uartSerial.println("Start Server False");
-      vTaskDelay(5000 / portTICK_PERIOD_MS);
+      uartSerial.println("Server is not active!");
+      vTaskDelay(20000 / portTICK_PERIOD_MS);
     }
   }
 }
@@ -277,21 +288,19 @@ void check_wifi_connection(void * parameters){
     {
       uartSerial.println("Wifi Communication Error");
       wifiConnection = false;
-      _startServer = false;
+      /*
       if (espServices.wifi_connect()){
         uartSerial.println("Reconnected to the AP");
         wifiConnection = true;
         _startServer = true;
-      }
+      }*/
       vTaskDelay(20000 / portTICK_PERIOD_MS);
     }else
     {
       wifiConnection = true;
-      _startServer = true;
       uartSerial.println("Wifi Communication Successful");
       vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
-    
   }
 }
 
@@ -314,6 +323,7 @@ void read_wifi_credential(void * parameters){
     uartSerial.println("Get PASSWORD\n");
     uartSerial.println(_espEeprom.get_password() + "\n");
     vTaskDelay(2000/portTICK_PERIOD_MS);
+   vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
@@ -327,10 +337,29 @@ void udp_broadcast(void * parameters){
       ip = WiFi.localIP().toString();
       udp.broadcastTo(ip.c_str(), 1234);
       uartSerial.println("UDP Broadcast");
-      vTaskDelay(2000 / portTICK_PERIOD_MS );
+      vTaskDelay(20000 / portTICK_PERIOD_MS );
     }else
     {
-      vTaskDelay(5000 / portTICK_PERIOD_MS );
+      vTaskDelay(30000 / portTICK_PERIOD_MS );
+    }
+  }
+}
+
+void tcp_server_start(void * parameters){
+  for(;;){
+    if (wifiConnection)
+    {
+      if (!_startServer)
+      {
+        espTcpServer->startServer();
+        uartSerial.println("Server Started");
+      }
+      _startServer = true;
+      vTaskDelay(10000 / portTICK_PERIOD_MS);   
+    }else
+    {
+      _startServer = false;
+      vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
   }
 }

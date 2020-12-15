@@ -1,6 +1,8 @@
 #ifndef ESPSERCIVES_H
 #define ESPSERVICES_H
 #include <Arduino.h>
+#include "esp_uart.h"
+#include "esp_eeprom.h"
 
 class EspServices
 {
@@ -13,6 +15,9 @@ public:
     bool wifi_connect();
     String get_eeprom();
     String get_Eeprom();
+    EspUart * esp_uart = EspUart::get_instance();
+    HardwareSerial serial_uart = esp_uart->uart_init();
+    EspEeprom espEeprom = EspEeprom(96);
     ~EspServices();
 };
 

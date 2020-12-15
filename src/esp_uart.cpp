@@ -1,7 +1,6 @@
 #include "esp_uart.h"
 #include <HardwareSerial.h>
 
-HardwareSerial uart1(1);
 EspUart * EspUart::_espUart = nullptr;
 
 EspUart * EspUart::get_instance(){

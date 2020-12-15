@@ -5,12 +5,8 @@
 #include "esp_eeprom.h"
 #include "esp_uart.h"
 
-EspEeprom espEeprom = EspEeprom(96);
 HTTPClient http;
 //WiFiServer server;
-
-EspUart * esp_uart = EspUart::get_instance();
-HardwareSerial serial_uart = esp_uart->uart_init();
 
 EspServices::EspServices(){
   
@@ -50,16 +46,19 @@ bool EspServices::wifi_connect(){
   int counter = 0;
   String id = espEeprom.get_ssid();
   String pass = espEeprom.get_password();
-
-  //WiFi.mode(WIFI_STA);
-  WiFi.begin(id.c_str(), pass.c_str());
-
+  serial_uart.println("GET EEPROM");
+  serial_uart.println(id);
+  serial_uart.println(pass);
+  
+  WiFi.begin(id.c_str(),pass.c_str());
+  
   while (WiFi.status() != WL_CONNECTED) { //Check for the connection
       delay(1000);
       counter++;
       if (counter > 2)
       {
         counter = 0;
+        serial_uart.println("Wifi Connect Timeout");
         return false;
       }
   }

@@ -10,6 +10,7 @@ class EspUart{
     public:
         static EspUart* get_instance();
         HardwareSerial uart_init();
+        HardwareSerial uart1 = HardwareSerial(1);
 };
 
 #endif
