@@ -29,10 +29,18 @@ bool EspEeprom::write_password(String password){
 
 String EspEeprom::get_ssid(){
     String ssid;
+    int i = 0;
+    char temp;
     EEPROM.begin(96);
-    for (int i = 0; i < 32; ++i)
+    while (i < 32)
     {
-        ssid += char(EEPROM.read(i));
+        temp = char(EEPROM.read(i));
+        if (temp == '\0')
+        {
+            break;
+        }
+        ssid += temp;
+        i++;
     }
     EEPROM.end();
     return ssid;
@@ -40,10 +48,18 @@ String EspEeprom::get_ssid(){
 
 String EspEeprom::get_password(){
     String password;
+    int i = 32;
+    char temp;
     EEPROM.begin(100);
-    for (int i = 32; i < 96; ++i)
+    while (i < 96)
     {
-        password += char(EEPROM.read(i));
+        temp = char(EEPROM.read(i));
+        if (temp == '\0')
+        {
+            break;
+        }
+        password += temp;
+        i++;
     }
     EEPROM.end();
     return password;
